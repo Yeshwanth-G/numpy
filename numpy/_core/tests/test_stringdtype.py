@@ -723,6 +723,20 @@ def test_fancy_indexing(string_list):
     for ind in [[0], [1], [2], [3], [[0, 0]], [[1, 1, 3]], [[1, 1]]]:
         assert_array_equal(sarr[ind], uarr[ind])
 
+    # Assigning a 0-d (broadcast) right-hand side holding an
+    # arena-allocated (long) string used to segfault, because the value was
+    # read back with the wrong string arena. A short string (stored inline)
+    # exercised a different path and worked, so test both.
+    for rhs in ['Z' * 20, 'Zz']:
+        sarr = np.array(['v0', 'v1', 'v2', 'v3'], dtype="T").reshape(2, 2)
+        uarr = sarr.astype("U40")
+        for op in (np.array(rhs, dtype="T"), np.array(rhs, dtype="U40"), rhs):
+            sref = sarr.copy()
+            uref = uarr.copy()
+            sref[[0, 1], [0, 1]] = op
+            uref[[0, 1], [0, 1]] = rhs
+            assert_array_equal(sref.astype("U40"), uref)
+
 
 def test_flatiter_indexing():
     # see gh-29659

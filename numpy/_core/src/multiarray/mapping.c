@@ -856,7 +856,7 @@ get_item_pointer(PyArrayObject *self, char **ptr,
  * @param view Resulting array (new reference)
  * @param indices parsed index information
  * @param index_num number of indices
- * @param ensure_array true if result should be a base class array, 
+ * @param ensure_array true if result should be a base class array,
  *        false if result should inherit type from self
  *
  * @return 0 on success -1 on failure
@@ -2150,9 +2150,27 @@ array_assign_subscript(PyArrayObject *self, PyObject *ind, PyObject *op)
         /* May need a generic copy function (only for refs and odd sizes) */
         NPY_ARRAYMETHOD_FLAGS transfer_flags;
         npy_intp itemsize = PyArray_ITEMSIZE(self);
+        /*
+         * The values are read from the extra operand as it is delivered by the
+         * outer iterator.  Usually that is the requested dtype `descr` (the
+         * iterator buffers and casts to it as needed), but when the iterator
+         * has to materialize a *new* operand -- for example to broadcast a 0-d
+         * right-hand side -- the data lives in that fresh operand instead, with
+         * its own descriptor.  For parametric dtypes such as StringDType this
+         * matters because the descriptor owns the string arena/allocator: using
+         * `self`'s descriptor to read the materialized data then references the
+         * wrong arena and segfaults.  Detect the materialized case
+         * and use the operand's actual descriptor as the source.
+         */
+        PyArray_Descr *extra_op_descr = descr;
+        PyArrayObject *iter_op =
+                NpyIter_GetOperandArray(mit->outer)[mit->num_fancy];
+        if (iter_op != mit->extra_op) {
+            extra_op_descr = PyArray_DESCR(iter_op);
+        }
         if (PyArray_GetDTypeTransferFunction(
                 1, itemsize, itemsize,
-                descr, PyArray_DESCR(self),
+                extra_op_descr, PyArray_DESCR(self),
                 0, &cast_info, &transfer_flags) != NPY_SUCCEED) {
             goto fail;
         }
