@@ -1116,6 +1116,28 @@ def test_searchsorted_gh31533():
     )
 
 
+@pytest.mark.parametrize("length", [5, 30])  # lengths > 15 bytes -> arena
+def test_sort_heapsort_fallback(length):
+    # Two sorted runs exhaust the introsort depth limit, so the default
+    # sort falls back to heapsort, which used to segfault for StringDType.
+    syms = [f"S{i:0{length - 1}d}" for i in range(500)]
+    arr = np.array(syms * 2, dtype="T")
+    arr_u = arr.astype(f"U{length}")
+    expected = np.sort(arr_u)
+
+    assert_array_equal(np.sort(arr), expected)
+    assert_array_equal(arr[np.argsort(arr)], expected)
+
+    values, counts = np.unique(arr, return_counts=True)
+    assert_array_equal(values, np.unique(arr_u))
+    assert_array_equal(counts, np.full(500, 2))
+
+    rev = np.array(syms[::-1], dtype="T")
+    assert_array_equal(
+        np.intersect1d(arr[:500], rev), np.intersect1d(arr_u[:500], arr_u)
+    )
+
+
 @pytest.mark.parametrize(
     "strings",
     [
